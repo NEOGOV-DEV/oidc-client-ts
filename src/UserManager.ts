@@ -289,13 +289,20 @@ export class UserManager {
         if (user?.refresh_token) {
             logger.debug("using refresh token");
             const state = new RefreshState(user as Required<User>);
-            return await this._useRefreshToken({
-                state,
-                redirect_uri: requestArgs.redirect_uri,
-                resource: requestArgs.resource,
-                extraTokenParams: requestArgs.extraTokenParams,
-                timeoutInSeconds: silentRequestTimeoutInSeconds,
-            });
+            if (user?.expires_in !== undefined && user?.expires_in <= this.settings.accessTokenExpiringNotificationTimeInSeconds) {
+                await navigator.locks.request("silent-refresh", async () => {
+                    user = await this._useRefreshToken({
+                        state,
+                        redirect_uri: requestArgs.redirect_uri,
+                        resource: requestArgs.resource,
+                        extraTokenParams: requestArgs.extraTokenParams,
+                        timeoutInSeconds: silentRequestTimeoutInSeconds,
+                    });
+                });
+            } else {
+                await this._events.load(user);
+            }
+            return user;
         }
 
         const url = this.settings.silent_redirect_uri;
